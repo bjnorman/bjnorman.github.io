@@ -1,0 +1,536 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Deal or No Deal - ESL Edition</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <style>
+        @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;700;900&display=swap');
+        
+        body {
+            font-family: 'Inter', sans-serif;
+            user-select: none;
+        }
+
+        .briefcase-container {
+            perspective: 1000px;
+        }
+
+        .briefcase {
+            background: linear-gradient(135deg, #d1d5db 0%, #9ca3af 100%);
+            box-shadow: inset 0 2px 4px rgba(255,255,255,0.5), 0 4px 6px rgba(0,0,0,0.3);
+            transition: transform 0.2s, filter 0.2s;
+        }
+        
+        .briefcase:hover:not(.disabled) {
+            transform: scale(1.05) translateY(-5px);
+            filter: brightness(1.1);
+        }
+
+        .briefcase.disabled {
+            opacity: 0;
+            pointer-events: none;
+        }
+
+        .briefcase-handle {
+            background: linear-gradient(to bottom, #4b5563, #1f2937);
+        }
+
+        .value-box {
+            transition: all 0.5s;
+        }
+        
+        .value-box.eliminated {
+            opacity: 0.2;
+            background-color: #111 !important;
+            color: #666 !important;
+            text-decoration: line-through;
+        }
+
+        .modal-enter {
+            animation: popIn 0.4s cubic-bezier(0.175, 0.885, 0.32, 1.275) forwards;
+        }
+
+        @keyframes popIn {
+            0% { transform: scale(0.5); opacity: 0; }
+            100% { transform: scale(1); opacity: 1; }
+        }
+        
+        @keyframes glow {
+            0% { box-shadow: 0 0 5px #eab308; }
+            50% { box-shadow: 0 0 20px #eab308, 0 0 30px #ca8a04; }
+            100% { box-shadow: 0 0 5px #eab308; }
+        }
+
+        .golden-glow {
+            animation: glow 2s infinite;
+        }
+    </style>
+</head>
+<body class="bg-slate-900 text-white h-screen w-screen overflow-hidden flex flex-col">
+
+    <!-- Header / Instruction Area -->
+    <header class="h-16 md:h-20 bg-slate-800 border-b-4 border-yellow-500 flex flex-col items-center justify-center shadow-lg relative z-10 shrink-0">
+        <h1 class="text-xl md:text-3xl font-black uppercase tracking-wider text-yellow-400 drop-shadow-md" id="instruction-title">
+            Deal or No Deal
+        </h1>
+        <p class="text-sm md:text-base font-bold text-gray-300" id="instruction-subtitle">
+            Welcome! Pick your briefcase to start.
+        </p>
+    </header>
+
+    <!-- Main Game Area -->
+    <main class="flex-1 flex flex-row overflow-hidden relative">
+        
+        <!-- Left Sidebar: Low Values -->
+        <aside class="w-1/4 max-w-[200px] bg-slate-900 p-2 border-r-2 border-slate-700 flex flex-col gap-1 overflow-y-auto" id="left-values">
+            <!-- Values will be injected here via JS -->
+        </aside>
+
+        <!-- Center Board: Briefcases -->
+        <section class="flex-1 flex flex-col relative">
+            <div class="flex-1 p-2 md:p-6 overflow-y-auto flex flex-col items-center justify-center">
+                <div class="grid grid-cols-4 sm:grid-cols-5 gap-3 md:gap-6 w-full max-w-4xl place-items-center" id="cases-container">
+                    <!-- Briefcases will be injected here via JS -->
+                </div>
+            </div>
+
+            <!-- Bottom Player Bar -->
+            <div class="h-24 md:h-32 bg-slate-800 border-t-4 border-blue-500 flex items-center justify-center gap-6 shadow-[0_-10px_15px_rgba(0,0,0,0.3)] shrink-0" id="player-area">
+                <div class="text-center hidden" id="player-case-label">
+                    <p class="text-blue-400 font-bold uppercase tracking-widest text-sm md:text-base mb-2">Your Case</p>
+                    <div id="player-case-slot" class="w-16 h-12 md:w-20 md:h-14"></div>
+                </div>
+                <div class="text-center hidden" id="round-info">
+                    <p class="text-gray-400 font-bold text-xs md:text-sm">ROUND <span id="round-number" class="text-white text-lg">1</span></p>
+                    <p class="text-yellow-400 font-bold text-sm md:text-lg">Open <span id="cases-to-open">5</span> cases</p>
+                </div>
+            </div>
+        </section>
+
+        <!-- Right Sidebar: High Values -->
+        <aside class="w-1/4 max-w-[200px] bg-slate-900 p-2 border-l-2 border-slate-700 flex flex-col gap-1 overflow-y-auto" id="right-values">
+            <!-- Values will be injected here via JS -->
+        </aside>
+
+    </main>
+
+    <!-- Case Revealed Modal -->
+    <div id="reveal-modal" class="fixed inset-0 bg-black/50 z-50 hidden flex items-center justify-center p-4">
+        <div class="bg-slate-800 border-2 border-slate-600 rounded-xl p-8 max-w-md w-full text-center shadow-2xl modal-enter">
+            <h2 class="text-2xl font-bold text-gray-300 mb-4">Case <span id="reveal-case-num" class="text-white"></span> contains:</h2>
+            <div id="reveal-value" class="text-4xl md:text-5xl font-black text-yellow-400 mb-8 py-4 bg-slate-900 rounded-lg border border-slate-700">
+                ¥0
+            </div>
+            <button onclick="closeRevealModal()" class="w-full bg-blue-600 hover:bg-blue-500 text-white font-bold py-3 px-6 rounded-lg transition text-xl shadow-lg">
+                Continue
+            </button>
+        </div>
+    </div>
+
+    <!-- Banker Offer Modal -->
+    <div id="banker-modal" class="fixed inset-0 bg-black/50 z-50 hidden flex items-center justify-center p-4">
+        <div class="bg-slate-800 border-4 border-yellow-500 rounded-2xl p-6 md:p-8 max-w-lg w-full text-center shadow-[0_0_50px_rgba(234,179,8,0.5)] modal-enter">
+            <h2 class="text-2xl md:text-3xl font-black text-white uppercase tracking-widest mb-2 flex items-center justify-center gap-4">
+                <span class="text-2xl">☎️</span> The Banker Calling
+            </h2>
+            <p class="text-gray-300 mb-4 text-base">The Banker offers to buy your case for:</p>
+            
+            <div id="banker-offer-value" class="text-4xl md:text-6xl font-black text-green-400 mb-8 py-4 bg-slate-900 rounded-xl border border-slate-700 golden-glow shadow-inner">
+                ¥0
+            </div>
+            
+            <div class="flex flex-col sm:flex-row gap-4 justify-center">
+                <button onclick="handleBankerDecision('DEAL')" class="flex-1 bg-green-600 hover:bg-green-500 text-white font-black py-3 px-4 rounded-xl transition text-xl shadow-lg border-b-4 border-green-800 hover:border-green-600">
+                    DEAL!
+                </button>
+                <button onclick="handleBankerDecision('NO_DEAL')" class="flex-1 bg-red-600 hover:bg-red-500 text-white font-black py-3 px-4 rounded-xl transition text-xl shadow-lg border-b-4 border-red-800 hover:border-red-600">
+                    NO DEAL!
+                </button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Final Choice Modal -->
+    <div id="final-choice-modal" class="fixed inset-0 bg-black/50 z-50 hidden flex items-center justify-center p-4">
+        <div class="bg-slate-800 border-4 border-blue-500 rounded-2xl p-8 max-w-lg w-full text-center shadow-[0_0_50px_rgba(59,130,246,0.3)] modal-enter">
+            <h2 class="text-2xl md:text-3xl font-black text-white uppercase mb-4">Final Two Cases!</h2>
+            <p class="text-gray-300 mb-8 text-lg">
+                There are only 2 cases left: your case and one on the board.<br>
+                Do you want to keep your case, or switch?
+            </p>
+            
+            <div class="flex flex-col sm:flex-row gap-4 justify-center">
+                <button onclick="handleFinalChoice('KEEP')" class="flex-1 bg-blue-600 hover:bg-blue-500 text-white font-bold py-4 px-6 rounded-xl transition text-xl shadow-lg border-b-4 border-blue-800">
+                    KEEP MY CASE
+                </button>
+                <button onclick="handleFinalChoice('SWITCH')" class="flex-1 bg-purple-600 hover:bg-purple-500 text-white font-bold py-4 px-6 rounded-xl transition text-xl shadow-lg border-b-4 border-purple-800">
+                    SWITCH CASES
+                </button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Game Over Modal -->
+    <div id="game-over-modal" class="fixed inset-0 bg-black/90 z-50 hidden flex items-center justify-center p-4">
+        <div class="bg-slate-800 border-4 border-white rounded-2xl p-8 max-w-2xl w-full text-center shadow-2xl modal-enter">
+            <h2 id="end-message-title" class="text-3xl md:text-5xl font-black text-white uppercase mb-4">You Won!</h2>
+            <p id="end-message-subtitle" class="text-xl text-gray-300 mb-6">Your prize is:</p>
+            
+            <div id="final-prize-value" class="text-5xl md:text-7xl font-black text-yellow-400 mb-8 py-6 bg-slate-900 rounded-xl border border-slate-700 shadow-inner">
+                ¥0
+            </div>
+
+            <div id="case-content-reveal" class="hidden mb-8 p-4 bg-slate-900 rounded-lg">
+                <p class="text-gray-400">Your original case contained: <span id="original-case-val" class="font-bold text-white"></span></p>
+            </div>
+            
+            <button onclick="initGame()" class="bg-blue-600 hover:bg-blue-500 text-white font-bold py-3 px-8 rounded-xl transition text-xl shadow-lg border-b-4 border-blue-800">
+                Play Again
+            </button>
+        </div>
+    </div>
+
+    <script>
+        // 20 Realistic Yen Values for the board (10 low, 10 high)
+        const BOARD_VALUES = [
+            1, 500, 1000, 5000, 10000, 20000, 30000, 40000, 50000, 75000, // 10 Low
+            100000, 500000, 1000000, 2500000, 5000000, 10000000, 20000000, 30000000, 50000000, 100000000 // 10 High
+        ];
+
+        // Rules based on user request: 5, 4, 3, 2, 1, 1, 1, 1
+        // Starting cases: 20. Pick 1. Left on board: 19.
+        // Cases to open per round: Total opened = 18. 1 left on board + player's case.
+        const CASES_TO_OPEN_PER_ROUND = [5, 4, 3, 2, 1, 1, 1, 1];
+
+        // Game State Variables
+        let cases = []; // Array of { id: 1..20, value: number, opened: boolean, eliminated: boolean }
+        let playerCaseId = null;
+        let currentRound = 0;
+        let openedThisRound = 0;
+        let gameState = 'PICK_PLAYER_CASE'; // PICK_PLAYER_CASE, OPEN_CASES, BANKER_OFFER, FINAL_CHOICE, GAME_OVER
+        let currentBankerOffer = 0;
+        let finalPrize = 0;
+
+        // DOM Elements
+        const titleEl = document.getElementById('instruction-title');
+        const subtitleEl = document.getElementById('instruction-subtitle');
+        const casesContainer = document.getElementById('cases-container');
+        const leftValuesContainer = document.getElementById('left-values');
+        const rightValuesContainer = document.getElementById('right-values');
+        const playerCaseLabel = document.getElementById('player-case-label');
+        const playerCaseSlot = document.getElementById('player-case-slot');
+        const roundInfo = document.getElementById('round-info');
+        const roundNumberEl = document.getElementById('round-number');
+        const casesToOpenEl = document.getElementById('cases-to-open');
+
+        // Modals
+        const revealModal = document.getElementById('reveal-modal');
+        const revealCaseNum = document.getElementById('reveal-case-num');
+        const revealValue = document.getElementById('reveal-value');
+        
+        const bankerModal = document.getElementById('banker-modal');
+        const bankerOfferValue = document.getElementById('banker-offer-value');
+
+        const finalChoiceModal = document.getElementById('final-choice-modal');
+        
+        const gameOverModal = document.getElementById('game-over-modal');
+        const endMessageTitle = document.getElementById('end-message-title');
+        const endMessageSubtitle = document.getElementById('end-message-subtitle');
+        const finalPrizeValue = document.getElementById('final-prize-value');
+        const caseContentReveal = document.getElementById('case-content-reveal');
+        const originalCaseVal = document.getElementById('original-case-val');
+
+        // Format Currency in JPY
+        const formatMoney = (amount) => {
+            return new Intl.NumberFormat('ja-JP', { style: 'currency', currency: 'JPY' }).format(amount);
+        };
+
+        // Shuffle function (Fisher-Yates)
+        const shuffle = (array) => {
+            let currentIndex = array.length, randomIndex;
+            while (currentIndex !== 0) {
+                randomIndex = Math.floor(Math.random() * currentIndex);
+                currentIndex--;
+                [array[currentIndex], array[randomIndex]] = [array[randomIndex], array[currentIndex]];
+            }
+            return array;
+        };
+
+        // Initialize / Reset Game
+        function initGame() {
+            // Reset state
+            playerCaseId = null;
+            currentRound = 0;
+            openedThisRound = 0;
+            gameState = 'PICK_PLAYER_CASE';
+            currentBankerOffer = 0;
+            finalPrize = 0;
+            
+            // Hide Modals
+            revealModal.classList.add('hidden');
+            bankerModal.classList.add('hidden');
+            finalChoiceModal.classList.add('hidden');
+            gameOverModal.classList.add('hidden');
+            caseContentReveal.classList.add('hidden');
+
+            // Reset UI components
+            playerCaseLabel.classList.add('hidden');
+            playerCaseSlot.innerHTML = '';
+            roundInfo.classList.add('hidden');
+            
+            updateInstructions('Deal or No Deal', 'Pick your briefcase to start!');
+
+            // Setup Cases
+            let shuffledValues = shuffle([...BOARD_VALUES]);
+            cases = [];
+            for (let i = 0; i < 20; i++) {
+                cases.push({
+                    id: i + 1,
+                    value: shuffledValues[i],
+                    opened: false,
+                    eliminated: false
+                });
+            }
+
+            renderBoard();
+            renderValuesSidebar();
+        }
+
+        function renderValuesSidebar() {
+            leftValuesContainer.innerHTML = '';
+            rightValuesContainer.innerHTML = '';
+
+            // First 10 go left, next 10 go right
+            for (let i = 0; i < 20; i++) {
+                const val = BOARD_VALUES[i];
+                // Check if this value is eliminated
+                const caseMatch = cases.find(c => c.value === val);
+                const isEliminated = caseMatch && caseMatch.eliminated;
+
+                const valEl = document.createElement('div');
+                valEl.className = `value-box flex items-center justify-center p-1 md:p-2 rounded font-bold text-xs md:text-sm shadow border border-slate-900 ${isEliminated ? 'eliminated' : ''}`;
+                valEl.innerText = formatMoney(val);
+
+                if (i < 10) {
+                    valEl.classList.add(isEliminated ? 'bg-slate-800' : 'bg-yellow-400', isEliminated ? 'text-gray-500' : 'text-slate-900');
+                    leftValuesContainer.appendChild(valEl);
+                } else {
+                    valEl.classList.add(isEliminated ? 'bg-slate-800' : 'bg-red-500', isEliminated ? 'text-gray-500' : 'text-white');
+                    rightValuesContainer.appendChild(valEl);
+                }
+            }
+        }
+
+        function createBriefcaseHTML(id) {
+            return `
+                <div class="briefcase-container w-14 h-10 sm:w-16 sm:h-12 md:w-20 md:h-14 lg:w-24 lg:h-16 relative">
+                    <div class="briefcase w-full h-full rounded-md border-2 border-slate-600 flex items-center justify-center relative cursor-pointer group">
+                        <div class="briefcase-handle absolute -top-2 md:-top-3 left-1/2 transform -translate-x-1/2 w-6 md:w-8 h-3 md:h-4 border-2 md:border-4 border-slate-800 rounded-t-md z-[-1]"></div>
+                        <span class="bg-white/90 text-slate-900 font-bold text-sm md:text-xl px-2 py-0.5 md:py-1 rounded shadow-inner">${id}</span>
+                        <div class="absolute inset-0 bg-white/0 group-hover:bg-white/20 transition rounded-md"></div>
+                    </div>
+                </div>
+            `;
+        }
+
+        function renderBoard() {
+            casesContainer.innerHTML = '';
+            cases.forEach(c => {
+                if (c.id === playerCaseId) return; // Don't render player's case on main board
+                
+                const caseWrapper = document.createElement('div');
+                caseWrapper.innerHTML = createBriefcaseHTML(c.id);
+                const caseEl = caseWrapper.firstElementChild;
+                
+                if (c.opened) {
+                    caseEl.querySelector('.briefcase').classList.add('disabled');
+                } else {
+                    caseEl.addEventListener('click', () => handleCaseClick(c.id));
+                }
+                
+                casesContainer.appendChild(caseEl);
+            });
+        }
+
+        function handleCaseClick(id) {
+            if (gameState === 'PICK_PLAYER_CASE') {
+                selectPlayerCase(id);
+            } else if (gameState === 'OPEN_CASES') {
+                openCase(id);
+            }
+        }
+
+        function selectPlayerCase(id) {
+            playerCaseId = id;
+            gameState = 'OPEN_CASES';
+            currentRound = 0;
+            
+            // Move case to player slot
+            playerCaseLabel.classList.remove('hidden');
+            playerCaseSlot.innerHTML = createBriefcaseHTML(id);
+            // Disable hover effect on player case slot
+            playerCaseSlot.querySelector('.briefcase').classList.remove('cursor-pointer', 'group');
+            
+            setupNextRound();
+        }
+
+        function updateInstructions(title, subtitle) {
+            titleEl.innerText = title;
+            subtitleEl.innerText = subtitle;
+        }
+
+        function setupNextRound() {
+            if (currentRound >= CASES_TO_OPEN_PER_ROUND.length) {
+                // Should not reach here typically due to final choice logic, but safety first
+                handleFinalChoicePhase();
+                return;
+            }
+
+            const casesToOpen = CASES_TO_OPEN_PER_ROUND[currentRound];
+            openedThisRound = 0;
+            
+            roundInfo.classList.remove('hidden');
+            roundNumberEl.innerText = currentRound + 1;
+            casesToOpenEl.innerText = casesToOpen;
+            
+            updateInstructions(`Round ${currentRound + 1}`, `Open ${casesToOpen} cases`);
+            renderBoard();
+        }
+
+        function openCase(id) {
+            const targetCase = cases.find(c => c.id === id);
+            if (!targetCase || targetCase.opened) return;
+
+            targetCase.opened = true;
+            targetCase.eliminated = true;
+            openedThisRound++;
+
+            // Update UI immediately for clicked case to disappear
+            renderBoard();
+            
+            // Show Reveal Modal
+            gameState = 'REVEALING'; // Prevent clicks while modal is open
+            revealCaseNum.innerText = id;
+            revealValue.innerText = formatMoney(targetCase.value);
+            revealModal.classList.remove('hidden');
+            
+            // Update sidebar behind modal
+            renderValuesSidebar();
+        }
+
+        function closeRevealModal() {
+            revealModal.classList.add('hidden');
+            
+            const targetCasesThisRound = CASES_TO_OPEN_PER_ROUND[currentRound];
+            
+            if (openedThisRound >= targetCasesThisRound) {
+                // Round over, time for Banker
+                calculateAndShowBankerOffer();
+            } else {
+                // Continue round
+                gameState = 'OPEN_CASES';
+                const remaining = targetCasesThisRound - openedThisRound;
+                casesToOpenEl.innerText = remaining;
+                updateInstructions(`Round ${currentRound + 1}`, `Open ${remaining} more cases`);
+            }
+        }
+
+        function calculateAndShowBankerOffer() {
+            gameState = 'BANKER_OFFER';
+            updateInstructions('The Banker', 'Consider the offer...');
+            
+            // Calculate Offer
+            const remainingCases = cases.filter(c => !c.eliminated && c.id !== playerCaseId);
+            const playerCaseObj = cases.find(c => c.id === playerCaseId);
+            const allRemainingValues = [...remainingCases.map(c => c.value), playerCaseObj.value];
+            
+            const sum = allRemainingValues.reduce((a, b) => a + b, 0);
+            const expectedValue = sum / allRemainingValues.length;
+            
+            // Banker formula: Round number influences generosity. 
+            // Max round is 14. Offer gets closer to Expected Value as game progresses.
+            let roundFactor = (currentRound + 1) / 10;
+            if (roundFactor > 1) roundFactor = 0.95; // Cap at 95% of EV to keep tension
+            
+            let rawOffer = expectedValue * roundFactor;
+            
+            // Add slight randomness (+/- 5%) and round to nearest 1,000 Yen for cleanliness
+            const randomModifier = 0.95 + (Math.random() * 0.1); 
+            let finalOffer = Math.round((rawOffer * randomModifier) / 1000) * 1000;
+            
+            if (finalOffer < 100) finalOffer = 100; // minimum safety
+            
+            currentBankerOffer = finalOffer;
+            
+            // Show modal
+            bankerOfferValue.innerText = formatMoney(currentBankerOffer);
+            bankerModal.classList.remove('hidden');
+        }
+
+        function handleBankerDecision(decision) {
+            bankerModal.classList.add('hidden');
+            
+            if (decision === 'DEAL') {
+                endGame(currentBankerOffer, true);
+            } else {
+                // No Deal -> Next round or final choice
+                currentRound++;
+                if (currentRound >= CASES_TO_OPEN_PER_ROUND.length) {
+                    handleFinalChoicePhase();
+                } else {
+                    gameState = 'OPEN_CASES';
+                    setupNextRound();
+                }
+            }
+        }
+
+        function handleFinalChoicePhase() {
+            gameState = 'FINAL_CHOICE';
+            updateInstructions('Final Two!', 'Keep your case or switch?');
+            finalChoiceModal.classList.remove('hidden');
+        }
+
+        function handleFinalChoice(choice) {
+            finalChoiceModal.classList.add('hidden');
+            
+            const remainingBoardCase = cases.find(c => !c.opened && c.id !== playerCaseId);
+            const myCaseObj = cases.find(c => c.id === playerCaseId);
+            
+            let finalWinningCase = null;
+            if (choice === 'SWITCH') {
+                finalWinningCase = remainingBoardCase;
+            } else {
+                finalWinningCase = myCaseObj;
+            }
+            
+            endGame(finalWinningCase.value, false);
+        }
+
+        function endGame(winnings, wasDeal) {
+            gameState = 'GAME_OVER';
+            finalPrize = winnings;
+            
+            updateInstructions('Game Over', wasDeal ? 'You made a DEAL!' : 'No Deal to the end!');
+            
+            endMessageTitle.innerText = wasDeal ? 'DEAL ACCEPTED!' : 'YOUR CASE REVEALED!';
+            endMessageSubtitle.innerText = wasDeal ? 'You sold your case to the Banker for:' : 'Your final prize is:';
+            finalPrizeValue.innerText = formatMoney(winnings);
+            
+            if (wasDeal) {
+                const myCaseObj = cases.find(c => c.id === playerCaseId);
+                caseContentReveal.classList.remove('hidden');
+                originalCaseVal.innerText = formatMoney(myCaseObj.value);
+            } else {
+                caseContentReveal.classList.add('hidden');
+            }
+
+            gameOverModal.classList.remove('hidden');
+        }
+
+        // Start game on load
+        window.onload = initGame;
+    </script>
+</body>
+</html>
